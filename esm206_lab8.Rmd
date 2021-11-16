@@ -1,0 +1,153 @@
+---
+title: "Lab 8 ESM 206"
+author: "Alia Ajina"
+date: "11/16/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(modelsummary)
+library(corrplot)
+library(broom)
+library(here)
+```
+
+### Read in slo_homes.csv data
+
+```{r}
+homes <- read_csv(here("data", "slo_homes.csv"))
+```
+
+unique(homes$city) in the consule will return a list of all of the cities in the data set
+
+### Creat a subset with 4 cities
+
+Task: create a subset (called homes_subset) that only contains observations where the city is:
+- "San Luis Obispo"
+- "Atascadero"
+- "Arroyo Grande"
+- "Santa Maria-Orcutt"
+
+If i were to use a double equal symbol, ==, it would only return things in the specific order, it wouldn't check every row for all of these options, so we use the in operator; %in%
+
+```{r}
+homes_subset <- homes %>% 
+  filter(City %in% c("San Luis Obispo", "Atascadero", "Arroyo Grande", "Santa Maria-Orcutt"))
+```
+
+### A little exploration
+
+Task: create a summary table that has the mean and standard deviation of home prices grouped by city and sale status
+
+using eval = FALSE means the code won't run at all, if you use this code chunk in the future, don't use eval = FALSE, include = FALSE means it wont show up in your knitted document
+
+```{r, include = FALSE, eval = FALSE}
+homes_subset %>% 
+  group_by(City, Status) %>% 
+  summarize(mean_price = round(mean(Price), 1),
+            sd_price = round(sd(Price), 1),
+            mean_sqft = round(mean(SqFt), 1))
+```
+
+Task: Explore the relationship between square footage and home price (from homes_subset) in a scatterplot.
+
+Overall this follows a linear relationship with a positive relationship between sqaure footage and home prices on average.
+
+Outlier? Maybe location, amount of land, or view
+
+If there are outliers, we need to think about possible explanations for them
+
+```{r}
+ggplot(data = homes_subset, 
+       aes(x = SqFt, y = Price)) + 
+  geom_point(color = "#801B1B") + 
+  theme_minimal() + 
+  geom_smooth(method = "lm", color = "black")
+```
+
+### Try a few linear models
+
+Use multiple linear regression to investigate relationships between several predictor variables and home price
+
+Task: Create 2 different permutations of this model:
+1. Price as a function of City, Bedrooms, Bathrooms, SqFt, Status - lm 1
+2. Price - City, SqFt, Status - lm 2
+3. Price - City - lm 3
+
+```{r}
+lm_1 <- lm(Price ~ City + Bedrooms + Bathrooms + SqFt + Status, data = homes_subset)
+
+lm_2 <- lm(Price ~ City + SqFt + Status, data = homes_subset)
+
+lm_3 <- lm(Price ~ SqFt, data = homes_subset)
+
+
+# If I wanted SLO to be the reference level then:
+# I could use fct_relevel to specify a new reference level (within tidyverse package), and could specify the order by continuing to add the order i want after SLO...
+
+new_homes_subset <- homes_subset %>% 
+  mutate(City = fct_relevel(City, "San Luis Obispo"))
+
+lm_slo <- lm(Price ~ City + SqFt, data = new_homes_subset)
+
+summary(lm_slo)
+
+```
+
+AJ has been assigned as the city reference level
+Our R squared value tells me that "53 % of variance in home price is explained by this model"
+
+### Explore correlations between quantitative variables
+
+Task: Make a subset called homes_quant (starting from homes_subset) that only contains the variables from Price trhough SqFt).
+
+We do this because we can't use pearson's R for non-quantitative variables like Status
+
+```{r}
+homes_quant <- homes_subset %>% 
+select(Price:SqFt)
+
+homes_core <- cor(homes_quant)
+
+# Correlation matrix visualization
+
+corrplot(homes_core, method = "ellipse") # <- color and direction are displayed with ellipse
+```
+
+### Compare AIC values
+
+A lower AIC is better, they indicate a better fit model
+
+```{r}
+AIC(lm_1)
+AIC(lm_2)
+```
+
+### Use modelsummary() to return multiple model outputs
+
+```{r}
+modelsummary(list(lm_1, lm_2, lm_3))
+```
+
+### Use plot() to... make plots
+
+```{r}
+plot(lm_1)
+```
+
+#### Use broom::augment() to return the predictions for existing observations
+
+```{r}
+home_predictions <- augment(lm_1)
+```
+
+# Task: Make a histogram of the residuals from this model (lm_1)
+
+```{r}
+ggplot(data = home_predictions, aes(x = .resid)) + 
+  geom_histogram()
+```
+
